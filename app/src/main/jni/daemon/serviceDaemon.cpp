@@ -54,43 +54,50 @@ int main(int argc, char *argv[]) {
     }
 
     // 成为守护进程
-    // 成为会话组长
-    setsid();
-    // 改变工作目录
-    chdir("/");
+    int forkResult = fork();
+    if (forkResult == 0) {
+        // 成为会话组长
+        setsid();
+        // 改变工作目录
+        chdir("/");
 
-    // 清理僵尸进程
-    cleanZombieProcess(processName);
+        // 清理僵尸进程
+        cleanZombieProcess(processName);
 
-    // 管道处理
-    // 关闭pipe1的读端
-    close(pipe1Fd[0]);
-    // 关闭pipe2的写端
-    close(pipe2Fd[1]);
+        // 管道处理
+        // 关闭pipe1的读端
+        close(pipe1Fd[0]);
+        // 关闭pipe2的写端
+        close(pipe2Fd[1]);
 
-    // 管道监听，监听父进程情况
-    char readBuffer[100];
-    int readResult = read(pipe2Fd[0], readBuffer, 100);
-    LOGD(MY_NATIVE_TAG, "readResult is %d, errno is %d", readResult, errno);
-    // 阻塞中断，父进程已退出
-    LOGD(MY_NATIVE_TAG, "parent process is dead");
-    // 拉活处理
-    pid_t childPid = fork();
-    if (childPid == 0) {
-        // 唤醒广播拉活
-        char *wakeUpName = new char[strlen(packageName) + strlen(wakeUpClassName) + 1];
-        sprintf(wakeUpName, "%s/.%s", packageName, wakeUpClassName);
-        LOGD(MY_NATIVE_TAG, "wakeUpName is %s", wakeUpName);
-        int result = execlp("am", "am", "broadcast",
-                         "--user", "0", "-n", wakeUpName, (char *) NULL);
-        LOGD(MY_NATIVE_TAG, "execute am broadcast result is %d", result);
-    } else if (childPid > 0) {
-        waitpid(childPid, NULL, 0);
-        LOGD(MY_NATIVE_TAG, "execute am broadcast over");
+        // 管道监听，监听父进程情况
+        char readBuffer[100];
+        int readResult = read(pipe2Fd[0], readBuffer, 100);
+        LOGD(MY_NATIVE_TAG, "readResult is %d, errno is %d", readResult, errno);
+        // 阻塞中断，父进程已退出
+        LOGD(MY_NATIVE_TAG, "parent process is dead");
+        // 拉活处理
+        pid_t childPid = fork();
+        if (childPid == 0) {
+            // 唤醒广播拉活
+            char *wakeUpName = new char[strlen(packageName) + strlen(wakeUpClassName) + 1];
+            sprintf(wakeUpName, "%s/.%s", packageName, wakeUpClassName);
+            LOGD(MY_NATIVE_TAG, "wakeUpName is %s", wakeUpName);
+            int result = execlp("am", "am", "broadcast",
+                                "--user", "0", "-n", wakeUpName, (char *) NULL);
+            LOGD(MY_NATIVE_TAG, "execute am broadcast result is %d", result);
+        } else if (childPid > 0) {
+            waitpid(childPid, NULL, 0);
+            LOGD(MY_NATIVE_TAG, "execute am broadcast over");
+        } else {
+            LOGE(MY_NATIVE_TAG, "fork fail!");
+        }
+        return 0;
+    } else if (forkResult > 0) {
+        return 0;
     } else {
         LOGE(MY_NATIVE_TAG, "fork fail!");
     }
-    return 0;
 }
 
 static void cleanZombieProcess(char *nowProcessName) {
